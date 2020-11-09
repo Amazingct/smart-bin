@@ -67,7 +67,7 @@ void setup()
 }
 
 
-void post_data(int l)
+void post_data(int id, int l)
 {
 SerialMon.print("Connecting to APN: ");
   SerialMon.print(apn);
@@ -93,7 +93,9 @@ SerialMon.print("Connecting to APN: ");
       //data to post
       String httpRequestData = "";
       String level = String(l);
-      client.print(String("POST ") + resource+"?level="+level + " HTTP/1.1\r\n");
+      String bin_id = String(id);
+      String gps = "23.1-88-99";
+      client.print(String("POST ") + resource+"?level="+level +"&bin_id=" + bin_id + "&gps=" + gps + " HTTP/1.1\r\n");
       client.print(String("Host: ") + server + "\r\n");
       client.println("Connection: close");
       client.println("Content-Type: application/x-www-form-urlencoded");
@@ -125,8 +127,18 @@ SerialMon.print("Connecting to APN: ");
   
 }
 
+void get_location()
+{
+  //GPS datafrom module
+  //return string of long/lat
+}
+
+void get_level()
+{
+ //Ultrasonic sensor
+}
 
 void loop() 
 {
-  post_data(22);
+  post_data(000, 55);
 }
