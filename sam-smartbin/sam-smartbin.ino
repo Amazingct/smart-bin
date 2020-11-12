@@ -67,7 +67,7 @@ void setup()
 }
 
 
-void post_data(int id, int l)
+void post_data(String id, int l, String gps)
 {
 SerialMon.print("Connecting to APN: ");
   SerialMon.print(apn);
@@ -93,8 +93,8 @@ SerialMon.print("Connecting to APN: ");
       //data to post
       String httpRequestData = "";
       String level = String(l);
-      String bin_id = String(id);
-      String gps = "23.1-88-99";
+      String bin_id = id;
+      String gps = gps;
       client.print(String("POST ") + resource+"?level="+level +"&bin_id=" + bin_id + "&gps=" + gps + " HTTP/1.1\r\n");
       client.print(String("Host: ") + server + "\r\n");
       client.println("Connection: close");
@@ -140,5 +140,5 @@ void get_level()
 
 void loop() 
 {
-  post_data(000, 55);
+  post_data("BIN08055675618", 55, "12.6, 56.9");
 }
