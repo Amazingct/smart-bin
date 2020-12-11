@@ -1,144 +1,307 @@
-
-// Your GPRS credentials (leave empty, if not needed)
-const char apn[]      = ""; // APN (example: internet.vodafone.pt) use https://wiki.apnchanger.org
-const char gprsUser[] = ""; // GPRS User
-const char gprsPass[] = ""; // GPRS Password
-
-// Server details
-// The server variable can be just a domain name or it can have a subdomain. It depends on the service you are using
-const char server[] = "6820a2f9af6e.ngrok.io"; // domain name: example.com, maker.ifttt.com, etc
-const char resource[] = "/level";         // resource path, for example: /post-data.php
-const int  port = 80;                             // server port number
-
-
-// TTGO T-Call pins
-#define MODEM_RST            5
-#define MODEM_PWKEY          4
-#define MODEM_POWER_ON       23
-#define MODEM_TX             27
-#define MODEM_RX             26
-#define I2C_SDA              21
-#define I2C_SCL              22
-
-
-
-#define SerialMon Serial
-#define SerialAT Serial1
-// Configure TinyGSM library
-#define TINY_GSM_MODEM_SIM800      // Modem is SIM800
-#define TINY_GSM_RX_BUFFER   1024  // Set RX buffer to 1Kb
+#include <TinyGPS++.h>
 #include <Wire.h>
-#include <TinyGsmClient.h>
-#ifdef DUMP_AT_COMMANDS
-  #include <StreamDebugger.h>
-  StreamDebugger debugger(SerialAT, SerialMon);
-  TinyGsm modem(debugger);
-#else
-  TinyGsm modem(SerialAT);
-#endif
-// I2C for SIM800 (to keep it running when powered from battery)
-TwoWire I2CPower = TwoWire(0);
-// TinyGSM Client for Internet connection
-TinyGsmClient client(modem);
+#include <LiquidCrystal_I2C.h>
+#include "WiFi.h"
+#include <SoftwareSerial.h>
+#include <Servo.h>
+#include <FirebaseESP32.h>
+#define FIREBASE_HOST "finalbin-35e3c-default-rtdb.firebaseio.com/"
+#define FIREBASE_AUTH "6qYcuchjFTNvvB4dyCg7qqxOc3l0tXQUvMW9Vqr1"
+String path = "bins/";
+String bin_id = "Bin001";
+//Define FirebaseESP32 data object
+FirebaseData firebaseData;
+FirebaseJson json;
+Servo myservo;  // create servo object to control a servo
+int open_bin = 0;  
+int close_bin = 180;
+// Create a TinyGPS++ object
+TinyGPSPlus gps;
+SoftwareSerial ss(17, 16); // RX | TX
+const char* ssid = "Amazing";
+const char* password = "ogunlolu1";
+int lcdColumns = 16;
+int lcdRows = 2;
+const int trigPin = 5;
+const int echoPin = 22;
+// defines variables
+long duration;
+int distance, level;
+int ir = 21;
+float lat, lng;
+String latitude = "0";
+String longitude = "0";
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);  
 
 
-
-void setup() 
+//void IRAM_ATTR isr() 
+void open_lid()
 {
-  // Set serial monitor debugging window baud rate to 115200
-  SerialMon.begin(115200);
-  // Start I2C communication
-  I2CPower.begin(I2C_SDA, I2C_SCL, 400000);
-  
-  // Set modem reset, enable, power pins
-  pinMode(MODEM_PWKEY, OUTPUT);
-  pinMode(MODEM_RST, OUTPUT);
-  pinMode(MODEM_POWER_ON, OUTPUT);
-  digitalWrite(MODEM_PWKEY, LOW);
-  digitalWrite(MODEM_RST, HIGH);
-  digitalWrite(MODEM_POWER_ON, HIGH);
-
-  // Set GSM module baud rate and UART pins
-  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+  Serial.println("OPen Bin");
+  myservo.write(open_bin);
   delay(3000);
-
-  SerialMon.println("Initializing modem...");
-  modem.init();
+  myservo.write(close_bin);
+  Serial.println("close Bin");
 }
-
-
-void post_data(String id, int l, String gps)
+void printResult(FirebaseData &data)
 {
-SerialMon.print("Connecting to APN: ");
-  SerialMon.print(apn);
-  if (!modem.gprsConnect(apn, gprsUser, gprsPass)) 
-  {
-    SerialMon.println(" fail");
-  }
-  else 
-  {
-    SerialMon.println(" OK");
-    
-    SerialMon.print("Connecting to ");
-    SerialMon.print(server);
-    if (!client.connect(server, port)) 
-    {
-      SerialMon.println(" fail");
-    }
-    else 
-    {
-      SerialMon.println(" OK");
-      // Making an HTTP POST request
-      SerialMon.println("Performing HTTP POST request...");
-      //data to post
-      String httpRequestData = "";
-      String level = String(l);
-      String bin_id = id;
-      String gps = gps;
-      client.print(String("POST ") + resource+"?level="+level +"&bin_id=" + bin_id + "&gps=" + gps + " HTTP/1.1\r\n");
-      client.print(String("Host: ") + server + "\r\n");
-      client.println("Connection: close");
-      client.println("Content-Type: application/x-www-form-urlencoded");
-      client.print("Content-Length: ");
-      client.println(11);
-      client.println();
-      client.println(httpRequestData);
 
-      unsigned long timeout = millis();
-      while (client.connected() && millis() - timeout < 10000L) 
+  if (data.dataType() == "int")
+    Serial.println(data.intData());
+  else if (data.dataType() == "float")
+    Serial.println(data.floatData(), 5);
+  else if (data.dataType() == "double")
+    printf("%.9lf\n", data.doubleData());
+  else if (data.dataType() == "boolean")
+    Serial.println(data.boolData() == 1 ? "true" : "false");
+  else if (data.dataType() == "string")
+    Serial.println(data.stringData());
+  else if (data.dataType() == "json")
+  {
+    Serial.println();
+    FirebaseJson &json = data.jsonObject();
+    //Print all object data
+    Serial.println("Pretty printed JSON data:");
+    String jsonStr;
+    json.toString(jsonStr, true);
+    Serial.println(jsonStr);
+    Serial.println();
+    Serial.println("Iterate JSON data:");
+    Serial.println();
+    size_t len = json.iteratorBegin();
+    String key, value = "";
+    int type = 0;
+    for (size_t i = 0; i < len; i++)
+    {
+      json.iteratorGet(i, type, key, value);
+      Serial.print(i);
+      Serial.print(", ");
+      Serial.print("Type: ");
+      Serial.print(type == FirebaseJson::JSON_OBJECT ? "object" : "array");
+      if (type == FirebaseJson::JSON_OBJECT)
       {
-        // Print available data (HTTP response from server)
-        while (client.available()) 
-        {
-          char c = client.read();
-          SerialMon.print(c);
-          timeout = millis();
-        }
+        Serial.print(", Key: ");
+        Serial.print(key);
       }
-      SerialMon.println();
-    
-      // Close client and disconnect
-      client.stop();
-      SerialMon.println(F("Server disconnected"));
-      modem.gprsDisconnect();
-      SerialMon.println(F("GPRS disconnected"));
+      Serial.print(", Value: ");
+      Serial.println(value);
+    }
+    json.iteratorEnd();
+  }
+  else if (data.dataType() == "array")
+  {
+    Serial.println();
+    //get array data from FirebaseData using FirebaseJsonArray object
+    FirebaseJsonArray &arr = data.jsonArray();
+    //Print all array values
+    Serial.println("Pretty printed Array:");
+    String arrStr;
+    arr.toString(arrStr, true);
+    Serial.println(arrStr);
+    Serial.println();
+    Serial.println("Iterate array values:");
+    Serial.println();
+    for (size_t i = 0; i < arr.size(); i++)
+    {
+      Serial.print(i);
+      Serial.print(", Value: ");
+
+      FirebaseJsonData &jsonData = data.jsonData();
+      //Get the result data from FirebaseJsonArray object
+      arr.get(jsonData, i);
+      if (jsonData.typeNum == FirebaseJson::JSON_BOOL)
+        Serial.println(jsonData.boolValue ? "true" : "false");
+      else if (jsonData.typeNum == FirebaseJson::JSON_INT)
+        Serial.println(jsonData.intValue);
+      else if (jsonData.typeNum == FirebaseJson::JSON_FLOAT)
+        Serial.println(jsonData.floatValue);
+      else if (jsonData.typeNum == FirebaseJson::JSON_DOUBLE)
+        printf("%.9lf\n", jsonData.doubleValue);
+      else if (jsonData.typeNum == FirebaseJson::JSON_STRING ||
+               jsonData.typeNum == FirebaseJson::JSON_NULL ||
+               jsonData.typeNum == FirebaseJson::JSON_OBJECT ||
+               jsonData.typeNum == FirebaseJson::JSON_ARRAY)
+        Serial.println(jsonData.stringValue);
     }
   }
+  else if (data.dataType() == "blob")
+  {
+
+    Serial.println();
+
+    for (int i = 0; i < data.blobData().size(); i++)
+    {
+      if (i > 0 && i % 16 == 0)
+        Serial.println();
+
+      if (i < 16)
+        Serial.print("0");
+
+      Serial.print(data.blobData()[i], HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+  else if (data.dataType() == "file")
+  {
+
+    Serial.println();
+
+    File file = data.fileStream();
+    int i = 0;
+
+    while (file.available())
+    {
+      if (i > 0 && i % 16 == 0)
+        Serial.println();
+
+      int v = file.read();
+
+      if (v < 16)
+        Serial.print("0");
+
+      Serial.print(v, HEX);
+      Serial.print(" ");
+      i++;
+    }
+    Serial.println();
+    file.close();
+  }
+  else
+  {
+    Serial.println(data.payload());
+  }
+}
+
+void display_info(String info)
+{
+  Serial.println(info);
+  lcd.setCursor(0,1);
+  lcd.print("              ");
+  lcd.setCursor(0,1);
+  lcd.print(info);
+}
+
+void post(int level, String gps)
+{
+  json.set("Level", level);
+  json.set("gps", gps);
+
+  if (Firebase.updateNode(firebaseData, path + bin_id, json))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+ 
+    Serial.print("VALUE: ");
+    printResult(firebaseData);
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+}
+
+void setup()
+{
   
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi(true);
+  //Set database read timeout to 1 minute (max 15 minutes)
+  Firebase.setReadTimeout(firebaseData, 1000 * 60);
+  //tiny, small, medium, large and unlimited.
+  //Size and its write timeout e.g. tiny (1s), small (10s), medium (30s) and large (60s).
+  Firebase.setwriteSizeLimit(firebaseData, "tiny");
+  Serial.println(open_bin);
+  Serial.println(close_bin);
+  myservo.attach(18);
+  myservo.write(close_bin);
+  delay(1000);
+  pinMode(ir, INPUT);
+  //attachInterrupt(ir, isr, FALLING);
+  Wire.begin(33, 32);
+  Serial.begin(115200);
+  pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
+  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  lcd.init();                     
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("   SMART BIN   ");
+  lcd.setCursor(0,1);
+  lcd.print("loading....");
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+    lcd.setCursor(0,1);
+    lcd.print("connecting wifi..");
+  }
+ 
+  lcd.setCursor(0,1);
+  Serial.println("WiFi connnected..");
+  lcd.print("wifi connected...");
+  delay(1000);
+  ss.begin(9600);
 }
 
-void get_location()
+
+int get_level()
 {
-  //GPS datafrom module
-  //return string of long/lat
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  duration = pulseIn(echoPin, HIGH);
+  // Calculating the distance
+  distance = duration*0.034/2;
+  if (distance > 100){distance = 1;}
+  else if (distance < 100 && distance > 15){distance = 2;}
+  else if (distance < 15){distance = 3;}
+  return distance;
 }
 
-void get_level()
+void loop()
 {
- //Ultrasonic sensor
+  level = get_level();
+  display_info("LEVEL:" + String(level));
+  printFloat(gps.location.lat(), gps.location.isValid(), 6, 1);
+  printFloat(gps.location.lng(), gps.location.isValid(), 6, 0);
+  smartDelay(1000);
+  post(level, latitude + "," + longitude);
+}
+static void smartDelay(unsigned long ms)
+{
+  unsigned long start = millis();
+  do 
+  {
+    while (ss.available())
+      gps.encode(ss.read());
+  } while (millis() - start < ms);
 }
 
-void loop() 
+static void printFloat(float val, bool valid, int prec, int a)
 {
-  post_data("BIN08055675618", 55, "12.6, 56.9");
+  if (!valid)
+  {
+  Serial.println("no sats");
+  }
+  else
+  {
+    Serial.print(val, prec);
+  }
+  smartDelay(0);
+  if (a ==  1) latitude = String(val, prec);
+  if (a ==  0) longitude = String(val, prec);
+  
+  
 }
