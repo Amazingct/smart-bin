@@ -8,13 +8,14 @@
 #define FIREBASE_HOST "finalbin-35e3c-default-rtdb.firebaseio.com/"
 #define FIREBASE_AUTH "6qYcuchjFTNvvB4dyCg7qqxOc3l0tXQUvMW9Vqr1"
 String path = "bins/";
-String bin_id = "Bin001";
+String bin_id = "BIN002577897";
+String bin_name = "prototype_bin";
 //Define FirebaseESP32 data object
 FirebaseData firebaseData;
 FirebaseJson json;
 Servo myservo;  // create servo object to control a servo
-int open_bin = 0;  
-int close_bin = 180;
+int open_bin = 180;  
+int close_bin = 0;
 // Create a TinyGPS++ object
 TinyGPSPlus gps;
 SoftwareSerial ss(17, 16); // RX | TX
@@ -186,6 +187,8 @@ void post(int level, String gps)
 {
   json.set("Level", level);
   json.set("gps", gps);
+  json.set("name", bin_name);
+  
 
   if (Firebase.updateNode(firebaseData, path + bin_id, json))
   {
@@ -278,6 +281,7 @@ void loop()
   printFloat(gps.location.lng(), gps.location.isValid(), 6, 0);
   smartDelay(1000);
   post(level, latitude + "," + longitude);
+  if (digitalRead(ir) == LOW) open_lid();
 }
 static void smartDelay(unsigned long ms)
 {
